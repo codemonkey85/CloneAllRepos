@@ -8,22 +8,16 @@ IConfiguration config = new ConfigurationBuilder()
     .AddCommandLine(args)
     .Build();
 
-var targetDirectory = config.GetValue<string>("targetDirectory");
-var repos = config.GetValue<string[]>("reposToClone", Array.Empty<string>());
+var targetDirectory = config?.GetValue<string>("targetDirectory") ?? string.Empty;
+var repos = config?.GetSection("reposToClone").Get<string[]>() ?? Array.Empty<string>();
+
+IList<string> fails = new List<string>();
 
 CloneRepos(targetDirectory, repos);
-
-//using IHost host = Host.CreateDefaultBuilder(args)
-//    .ConfigureServices((_, services) => { }
-//        //services
-//            //.AddTransient<ITransientOperation, DefaultOperation>()
-//            //.AddScoped<IScopedOperation, DefaultOperation>()
-//            //.AddSingleton<ISingletonOperation, DefaultOperation>()
-//            //.AddTransient<OperationLogger>())
-//            )
-//    .Build();
-
-//await host.RunAsync();
+foreach (var fail in fails)
+{
+    Console.WriteLine(fail);
+}
 
 void CloneRepos(string targetDirectory, string[] repos)
 {
@@ -44,14 +38,37 @@ void CloneRepo(string targetDirectory, string repo)
 {
     try
     {
+        if (string.Equals("git@github.com:codemonkey85/CloneAllRepos.git", repo, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        var repoName = repo.Replace("git@github.com:codemonkey85/", string.Empty).Replace(".git", string.Empty);
         var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = targetDirectory,
             FileName = "git",
-            Arguments = $"clone {repo}",
+            Arguments = $"clone {repo} --no-tags",
             CreateNoWindow = true,
         };
-        Process.Start(startInfo);
+        Console.WriteLine($"Cloning {repo}");
+        var process = Process.Start(startInfo);
+        if (process is null)
+        {
+            throw new Exception("Cannot create process");
+        }
+        if (process.WaitForExit(1000 * 30))
+        {
+            Console.WriteLine($"Repo {repo} finished cloning");
+        }
+        else
+        {
+            Console.WriteLine($"Repo {repo} did not finish cloning");
+        }
+        var path = Path.Combine(targetDirectory, repoName);
+        if (!Directory.Exists(path))
+        {
+            fails.Add(path);
+        }
     }
     catch (Exception ex)
     {
@@ -61,7 +78,7 @@ void CloneRepo(string targetDirectory, string repo)
 
 void LogExceptions(Exception ex)
 {
-    StringBuilder sbError = new StringBuilder();
+    var sbError = new StringBuilder();
     AddExceptionToLog(sbError, ex);
     Console.WriteLine(sbError);
 }
