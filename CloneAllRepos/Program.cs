@@ -24,9 +24,13 @@ var client = new GitHubClient(myUser) { Credentials = credentials };
 var repos = await client.Repository.GetAllForCurrent();
 
 CloneRepos(targetDirectory, repos);
-foreach (var fail in fails)
+if (fails.Count > 0)
 {
-    Console.WriteLine(fail);
+    Console.WriteLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
+    foreach (var fail in fails)
+    {
+        Console.WriteLine(fail);
+    }
 }
 
 void CloneRepos(string targetDirectory, IEnumerable<Repository> repos)
@@ -48,10 +52,6 @@ void CloneRepo(string targetDirectory, Repository repo)
 {
     try
     {
-        if (string.Equals("git@github.com:codemonkey85/CloneAllRepos.git", repo.SshUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
         var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = targetDirectory,
@@ -76,7 +76,7 @@ void CloneRepo(string targetDirectory, Repository repo)
         var path = Path.Combine(targetDirectory, repo.Name);
         if (!Directory.Exists(path))
         {
-            fails.Add(path);
+            fails.Add($"{repo.Name}: {repo.SshUrl} ({path})");
         }
     }
     catch (Exception ex)
