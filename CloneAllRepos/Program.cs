@@ -1,17 +1,27 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Octokit;
 using System.Diagnostics;
 using System.Text;
+using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 IConfiguration config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddUserSecrets(typeof(Program).Assembly)
     .AddEnvironmentVariables()
     .AddCommandLine(args)
     .Build();
 
 var targetDirectory = config?.GetValue<string>("targetDirectory") ?? string.Empty;
-var repos = config?.GetSection("reposToClone").Get<string[]>() ?? Array.Empty<string>();
+var githubUserName = config?.GetValue<string>("githubUserName") ?? string.Empty;
+var personalAccessToken = config?.GetValue<string>("personalAccessToken") ?? string.Empty;
 
 IList<string> fails = new List<string>();
+
+var myUser = new ProductHeaderValue(githubUserName);
+var credentials = new Credentials(personalAccessToken);
+var client = new GitHubClient(myUser) { Credentials = credentials };
+
+var repos = await client.Repository.GetAllForCurrent();
 
 CloneRepos(targetDirectory, repos);
 foreach (var fail in fails)
@@ -19,7 +29,7 @@ foreach (var fail in fails)
     Console.WriteLine(fail);
 }
 
-void CloneRepos(string targetDirectory, string[] repos)
+void CloneRepos(string targetDirectory, IEnumerable<Repository> repos)
 {
     try
     {
@@ -34,23 +44,22 @@ void CloneRepos(string targetDirectory, string[] repos)
     }
 }
 
-void CloneRepo(string targetDirectory, string repo)
+void CloneRepo(string targetDirectory, Repository repo)
 {
     try
     {
-        if (string.Equals("git@github.com:codemonkey85/CloneAllRepos.git", repo, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals("git@github.com:codemonkey85/CloneAllRepos.git", repo.SshUrl, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
-        var repoName = repo.Replace("git@github.com:codemonkey85/", string.Empty).Replace(".git", string.Empty);
         var startInfo = new ProcessStartInfo
         {
             WorkingDirectory = targetDirectory,
             FileName = "git",
-            Arguments = $"clone {repo} --no-tags",
+            Arguments = $"clone {repo.Name} --no-tags",
             CreateNoWindow = true,
         };
-        Console.WriteLine($"Cloning {repo}");
+        Console.WriteLine($"Cloning {repo.Name}");
         var process = Process.Start(startInfo);
         if (process is null)
         {
@@ -58,13 +67,13 @@ void CloneRepo(string targetDirectory, string repo)
         }
         if (process.WaitForExit(1000 * 30))
         {
-            Console.WriteLine($"Repo {repo} finished cloning");
+            Console.WriteLine($"Repo {repo.Name} finished cloning");
         }
         else
         {
-            Console.WriteLine($"Repo {repo} did not finish cloning");
+            Console.WriteLine($"Repo {repo.Name} did not finish cloning");
         }
-        var path = Path.Combine(targetDirectory, repoName);
+        var path = Path.Combine(targetDirectory, repo.Name);
         if (!Directory.Exists(path))
         {
             fails.Add(path);
