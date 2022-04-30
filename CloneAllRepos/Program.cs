@@ -56,7 +56,7 @@ void CloneRepo(string targetDirectory, Repository repo)
         {
             WorkingDirectory = targetDirectory,
             FileName = "git",
-            Arguments = $"clone {repo.Name} --no-tags",
+            Arguments = $"clone {repo.SshUrl} --no-tags",
             CreateNoWindow = true,
         };
         Console.WriteLine($"Cloning {repo.Name}");
