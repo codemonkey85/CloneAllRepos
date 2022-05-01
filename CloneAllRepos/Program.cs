@@ -52,31 +52,44 @@ void CloneRepo(string targetDirectory, Repository repo)
 {
     try
     {
-        var startInfo = new ProcessStartInfo
+        var destinationPath = Path.Combine(targetDirectory, repo.Name);
+        if (!Directory.Exists(destinationPath))
         {
-            WorkingDirectory = targetDirectory,
-            FileName = "git",
-            Arguments = $"clone {repo.SshUrl} --no-tags",
-            CreateNoWindow = true,
-        };
-        Console.WriteLine($"Cloning {repo.Name}");
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            throw new Exception("Cannot create process");
-        }
-        if (process.WaitForExit(1000 * 30))
-        {
-            Console.WriteLine($"Repo {repo.Name} finished cloning");
+            Console.WriteLine($"Cloning {repo.Name}");
+            var process = Process.Start(new ProcessStartInfo
+            {
+                WorkingDirectory = targetDirectory,
+                FileName = "git",
+                Arguments = $"clone {repo.SshUrl} --no-tags",
+                CreateNoWindow = true,
+            });
+            if (process is null)
+            {
+                throw new Exception("Cannot create process");
+            }
+            if (process.WaitForExit(1000 * 30))
+            {
+                Console.WriteLine($"Repo {repo.Name} finished cloning");
+            }
+            else
+            {
+                Console.WriteLine($"Repo {repo.Name} did not finish cloning");
+            }
+            var path = Path.Combine(targetDirectory, repo.Name);
+            if (!Directory.Exists(path))
+            {
+                fails.Add($"{repo.Name}: {repo.SshUrl} ({path})");
+            }
         }
         else
         {
-            Console.WriteLine($"Repo {repo.Name} did not finish cloning");
-        }
-        var path = Path.Combine(targetDirectory, repo.Name);
-        if (!Directory.Exists(path))
-        {
-            fails.Add($"{repo.Name}: {repo.SshUrl} ({path})");
+            var process = Process.Start(new ProcessStartInfo
+            {
+                WorkingDirectory = destinationPath,
+                FileName = "git",
+                Arguments = $"pull",
+                CreateNoWindow = false,
+            });
         }
     }
     catch (Exception ex)
