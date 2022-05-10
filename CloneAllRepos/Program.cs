@@ -23,7 +23,11 @@ try
 
     var repos = await client.Repository.GetAllForCurrent();
 
-    CloneRepos(targetDirectory, repos);
+    foreach (var repo in repos)
+    {
+        CloneRepo(targetDirectory, repo);
+    }
+
     if (fails.Count > 0)
     {
         Console.WriteLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
@@ -36,14 +40,6 @@ try
 catch (Exception ex)
 {
     LogExceptions(ex);
-}
-
-void CloneRepos(string targetDirectory, IEnumerable<Repository> repos)
-{
-    foreach (var repo in repos)
-    {
-        CloneRepo(targetDirectory, repo);
-    }
 }
 
 void CloneRepo(string targetDirectory, Repository repo)
