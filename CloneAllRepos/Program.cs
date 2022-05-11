@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Octokit;
 using System.Diagnostics;
+using System.Text;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 IList<string> fails = new List<string>();
@@ -21,20 +22,40 @@ try
     var credentials = new Credentials(personalAccessToken);
     var client = new GitHubClient(myUser) { Credentials = credentials };
 
-    var repos = await client.Repository.GetAllForCurrent();
+    var repos = (await client.Repository.GetAllForCurrent()).ToList();
+
+    var allDirs = Directory.GetDirectories(targetDirectory).Select(dir => new DirectoryInfo(dir).Name);
+    var repoDirs = repos.Select(repo => repo.Name);
+
+    var remainingDirs = allDirs.Where(dir => !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
 
     foreach (var repo in repos)
     {
         CloneRepo(targetDirectory, repo);
     }
 
+    foreach (var repo in remainingDirs)
+    {
+        var destinationPath = Path.Combine(targetDirectory, repo);
+        var process = Process.Start(new ProcessStartInfo
+        {
+            WorkingDirectory = destinationPath,
+            FileName = "git",
+            Arguments = $"pull",
+            CreateNoWindow = false,
+        });
+    }
+
     if (fails.Count > 0)
     {
-        Console.WriteLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
+        var sbFails = new StringBuilder();
+        sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
         foreach (var fail in fails)
         {
-            Console.WriteLine(fail);
+            sbFails.AppendLine(fail);
         }
+        Console.WriteLine(sbFails);
+        File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
     }
 }
 catch (Exception ex)
