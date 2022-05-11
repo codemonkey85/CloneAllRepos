@@ -24,6 +24,26 @@ try
 
     var repos = (await client.Repository.GetAllForCurrent()).ToList();
 
+    foreach (var repo in repos.Where(r => r.Fork))
+    {
+        try
+        {
+            var fork = await client.Repository.Get(githubUserName, repo.Name);
+            var upstream = fork.Parent;
+            var compareResult = await client.Repository.Commit.Compare(upstream.Owner.Login, upstream.Name, upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}").ConfigureAwait(false);
+            if (compareResult.BehindBy > 0)
+            {
+                var upstreamBranchReference = await client.Git.Reference.Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}").ConfigureAwait(false);
+                await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}", new ReferenceUpdate(upstreamBranchReference.Object.Sha)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error with fork '{repo.Name}':");
+            LogExceptions(ex);
+        }
+    }
+
     var allDirs = Directory.GetDirectories(targetDirectory).Select(dir => new DirectoryInfo(dir).Name);
     var repoDirs = repos.Select(repo => repo.Name);
 
@@ -115,7 +135,7 @@ void CloneRepo(string targetDirectory, Repository repo)
 
 void LogExceptions(Exception ex)
 {
-    Console.WriteLine($"{ex.Message}{Environment.NewLine}{ex.StackTrace}");
+    Console.Error.WriteLine($"{ex.Message}{Environment.NewLine}{ex.StackTrace}");
     if (ex.InnerException is not null)
     {
         LogExceptions(ex.InnerException);
