@@ -52,7 +52,7 @@ try
 
     foreach (var repo in repos)
     {
-        CloneRepo(targetDirectory, repo);
+        CloneOrUpdateRepo(targetDirectory, repo, client);
     }
 
     foreach (var repo in remainingDirs)
@@ -84,7 +84,7 @@ catch (Exception ex)
     LogExceptions(ex);
 }
 
-void CloneRepo(string targetDirectory, Repository repo)
+void CloneOrUpdateRepo(string targetDirectory, Repository repo, GitHubClient gitHubClient)
 {
     try
     {
