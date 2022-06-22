@@ -5,6 +5,8 @@ using System.Text;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 IList<string> fails = new List<string>();
+var targetDirectory = string.Empty;
+
 try
 {
     IConfiguration config = new ConfigurationBuilder()
@@ -14,7 +16,7 @@ try
         .AddCommandLine(args)
         .Build();
 
-    var targetDirectory = config.GetValue("targetDirectory", string.Empty);
+    targetDirectory = config.GetValue("targetDirectory", string.Empty);
     var githubUserName = config.GetValue("githubUserName", string.Empty);
     var personalAccessToken = config.GetValue("personalAccessToken", string.Empty);
 
@@ -67,7 +69,14 @@ try
         });
     }
 
-    if (fails.Count > 0)
+}
+catch (Exception ex)
+{
+    LogExceptions(ex);
+}
+finally
+{
+    if (fails.Count > 0 && !string.IsNullOrEmpty(targetDirectory))
     {
         var sbFails = new StringBuilder();
         sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
@@ -78,10 +87,6 @@ try
         Console.WriteLine(sbFails);
         File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
     }
-}
-catch (Exception ex)
-{
-    LogExceptions(ex);
 }
 
 void CloneOrUpdateRepo(string targetDirectory, Repository repo, GitHubClient gitHubClient)
@@ -136,7 +141,9 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo, GitHubClient git
 
 void LogExceptions(Exception ex)
 {
-    Console.Error.WriteLine($"{ex.Message}{Environment.NewLine}{ex.StackTrace}");
+    var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
+    Console.Error.WriteLine(errorLine);
+    fails.Add(errorLine);
     if (ex.InnerException is not null)
     {
         LogExceptions(ex.InnerException);
