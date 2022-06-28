@@ -124,6 +124,7 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo, GitHubClient git
         }
         else
         {
+            Console.WriteLine($"Updating {repo.Name}");
             var process = Process.Start(new ProcessStartInfo
             {
                 WorkingDirectory = destinationPath,
