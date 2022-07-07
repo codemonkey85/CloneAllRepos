@@ -62,10 +62,7 @@ try
     foreach (var repo in remainingDirs)
     {
         var destinationPath = Path.Combine(targetReposDirectory, repo);
-        Process.Start(new ProcessStartInfo
-        {
-            WorkingDirectory = destinationPath, FileName = "git", Arguments = "pull", CreateNoWindow = false
-        });
+        PullRepo(destinationPath);
     }
 }
 catch (Exception ex)
@@ -120,10 +117,7 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
         else
         {
             Console.WriteLine($"Updating {repo.Name}");
-            Process.Start(new ProcessStartInfo
-            {
-                WorkingDirectory = destinationPath, FileName = "git", Arguments = "pull", CreateNoWindow = false
-            });
+            PullRepo(destinationPath);
         }
     }
     catch (Exception ex)
@@ -148,3 +142,11 @@ void LogExceptions(Exception ex)
         break;
     }
 }
+
+static Process? PullRepo(string workingDirectory) => Process.Start(new ProcessStartInfo
+{
+    WorkingDirectory = workingDirectory,
+    FileName = "git",
+    Arguments = "pull",
+    CreateNoWindow = false
+});
