@@ -45,7 +45,7 @@ try
         catch (Exception ex)
         {
             Console.WriteLine($"Error with fork '{repo.Name}':");
-            LogExceptions(ex);
+            LogExceptions(ex, repo.Name);
         }
     }
 
@@ -122,12 +122,16 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
     }
     catch (Exception ex)
     {
-        LogExceptions(ex);
+        LogExceptions(ex, repo.Name);
     }
 }
 
-void LogExceptions(Exception ex)
+void LogExceptions(Exception ex, string? repoName = null)
 {
+    if (!string.IsNullOrEmpty(repoName))
+    {
+        Console.Error.WriteLine($"=== Error with {repoName}! ===");
+    }
     Console.Error.WriteLine(ex);
     while (true)
     {
