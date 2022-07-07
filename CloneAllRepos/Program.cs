@@ -71,7 +71,7 @@ catch (Exception ex)
 }
 finally
 {
-    if (fails.Count > 0 && !string.IsNullOrEmpty(targetReposDirectory))
+    if (fails.Count > 0 && targetReposDirectory is { Length: > 0 })
     {
         var sbFails = new StringBuilder();
         sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
@@ -128,7 +128,7 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
 
 void LogExceptions(Exception ex, string? repoName = null)
 {
-    if (!string.IsNullOrEmpty(repoName))
+    if (repoName is { Length: > 0 })
     {
         Console.Error.WriteLine($"=== Error with {repoName}! ===");
     }
