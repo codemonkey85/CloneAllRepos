@@ -128,17 +128,16 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
 
 void LogExceptions(Exception ex)
 {
+    Console.Error.WriteLine(ex);
     while (true)
     {
         var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
-        Console.Error.WriteLine(errorLine);
         fails.Add(errorLine);
         if (ex.InnerException is not null)
         {
             ex = ex.InnerException;
             continue;
         }
-
         break;
     }
 }
