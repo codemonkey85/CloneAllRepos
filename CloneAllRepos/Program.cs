@@ -62,6 +62,10 @@ try
     foreach (var repo in remainingDirs)
     {
         var destinationPath = Path.Combine(targetReposDirectory, repo);
+        if (!Directory.Exists(Path.Combine(destinationPath, ".git")))
+        {
+            continue;
+        }
         PullRepo(destinationPath);
     }
 }
