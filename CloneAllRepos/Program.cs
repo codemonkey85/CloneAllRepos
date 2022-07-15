@@ -32,14 +32,14 @@ try
             var fork = await client.Repository.Get(githubUserName, repo.Name);
             var upstream = fork.Parent;
             var compareResult = await client.Repository.Commit.Compare(upstream.Owner.Login, upstream.Name,
-                upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}").ConfigureAwait(false);
+                upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}");
             if (compareResult.BehindBy > 0)
             {
                 Console.WriteLine($"Updating fork of {repo.Name}");
                 var upstreamBranchReference = await client.Git.Reference
-                    .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}").ConfigureAwait(false);
+                    .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}");
                 await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}",
-                    new ReferenceUpdate(upstreamBranchReference.Object.Sha)).ConfigureAwait(false);
+                    new ReferenceUpdate(upstreamBranchReference.Object.Sha));
             }
         }
         catch (Exception ex)
