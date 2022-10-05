@@ -15,7 +15,7 @@ try
         .AddCommandLine(args)
         .Build();
 
-    targetReposDirectory = config.GetValue("targetDirectory", string.Empty);
+    targetReposDirectory = config.GetValue("targetDirectory", string.Empty) ?? string.Empty;
     var githubUserName = config.GetValue("githubUserName", string.Empty);
     var personalAccessToken = config.GetValue("personalAccessToken", string.Empty);
 
