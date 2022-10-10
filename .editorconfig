@@ -1,5 +1,5 @@
-# Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
+# Remove the line below if you want to inherit .editorconfig settings from higher directories
 
 # C# files
 [*.cs]
@@ -19,8 +19,8 @@ insert_final_newline = false
 
 # Organize usings
 dotnet_separate_import_directive_groups = false
-dotnet_sort_system_directives_first = false
-file_header_template = unset
+dotnet_sort_system_directives_first = true
+file_header_template = 
 
 # this. and Me. preferences
 dotnet_style_qualification_for_event = false:suggestion
@@ -221,6 +221,13 @@ dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.begins_with_i.required_suffix = 
 dotnet_naming_style.begins_with_i.word_separator = 
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
+
+# ReSharper properties
+resharper_local_function_body = expression_body
+resharper_normalize_tag_names = true
+
+# ReSharper inspection severities
+resharper_arrange_local_function_body_highlighting = suggestion
 
 [*.{cs,vb}]
 dotnet_style_operator_placement_when_wrapping = beginning_of_line
