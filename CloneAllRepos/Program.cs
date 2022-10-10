@@ -122,7 +122,6 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
         {
             Console.WriteLine($"Updating {repo.Name}");
             PullRepo(destinationPath);
-            //PushRepo(destinationPath);
         }
     }
     catch (Exception ex)
@@ -151,18 +150,10 @@ void LogExceptions(Exception ex, string? repoName = null)
     }
 }
 
-static Process? PullRepo(string workingDirectory) => Process.Start(new ProcessStartInfo
+static void PullRepo(string workingDirectory) => Process.Start(new ProcessStartInfo
 {
     WorkingDirectory = workingDirectory,
     FileName = "git",
     Arguments = "pull",
     CreateNoWindow = false
 });
-
-//static Process? PushRepo(string workingDirectory) => Process.Start(new ProcessStartInfo
-//{
-//    WorkingDirectory = workingDirectory,
-//    FileName = "git",
-//    Arguments = "push",
-//    CreateNoWindow = false
-//});
