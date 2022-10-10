@@ -1,7 +1,7 @@
-﻿using Microsoft.Extensions.Configuration;
-using Octokit;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using Octokit;
 
 IList<string> fails = new List<string>();
 var targetReposDirectory = string.Empty;
