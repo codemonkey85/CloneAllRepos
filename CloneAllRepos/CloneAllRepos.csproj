@@ -22,6 +22,6 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0-rc.1.22426.10" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.0-rc.1.22426.10" />
-		<PackageReference Include="Octokit" Version="3.0.1" />
+		<PackageReference Include="Octokit" Version="4.0.0" />
 	</ItemGroup>
 </Project>
