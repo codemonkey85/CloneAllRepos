@@ -66,7 +66,7 @@ try
         {
             continue;
         }
-        PullRepo(destinationPath);
+        PullRepo(destinationPath, repo);
     }
 }
 catch (Exception ex)
@@ -121,7 +121,7 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
         else
         {
             Console.WriteLine($"Updating {repo.Name}");
-            PullRepo(destinationPath);
+            PullRepo(destinationPath, repo.Name);
         }
     }
     catch (Exception ex)
@@ -150,10 +150,17 @@ void LogExceptions(Exception ex, string? repoName = null)
     }
 }
 
-static void PullRepo(string workingDirectory) => Process.Start(new ProcessStartInfo
+static void PullRepo(string workingDirectory, string repoName)
 {
-    WorkingDirectory = workingDirectory,
-    FileName = "git",
-    Arguments = "pull",
-    CreateNoWindow = false
-});
+    var processStartInfo = new ProcessStartInfo
+    {
+        WorkingDirectory = workingDirectory,
+        FileName = "git",
+        Arguments = "pull",
+        CreateNoWindow = false
+    };
+
+    Console.WriteLine($"Starting {repoName}");
+    Console.WriteLine(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
+    Console.WriteLine($"Ending {repoName}");
+}
