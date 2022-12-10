@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Octokit;
 
 IList<string> fails = new List<string>();
-var targetReposDirectory = string.Empty;
+string? targetDirectory = null;
 
 try
 {
@@ -15,9 +15,23 @@ try
         .AddCommandLine(args)
         .Build();
 
-    targetReposDirectory = config.GetValue("targetDirectory", string.Empty) ?? string.Empty;
-    var githubUserName = config.GetValue("githubUserName", string.Empty);
-    var personalAccessToken = config.GetValue("personalAccessToken", string.Empty);
+    targetDirectory = config.GetValue(nameof(targetDirectory), string.Empty);
+    if (targetDirectory is not { Length: > 0 })
+    {
+        throw new Exception($"{nameof(targetDirectory)} is not set");
+    }
+
+    string? githubUserName = config.GetValue(nameof(githubUserName), string.Empty);
+    if (githubUserName is not { Length: > 0 })
+    {
+        throw new Exception($"{nameof(githubUserName)} is not set");
+    }
+
+    string? personalAccessToken = config.GetValue(nameof(personalAccessToken), string.Empty);
+    if (personalAccessToken is not { Length: > 0 })
+    {
+        throw new Exception($"{nameof(personalAccessToken)} is not set");
+    }
 
     var myUser = new ProductHeaderValue(githubUserName);
     var credentials = new Credentials(personalAccessToken);
@@ -51,19 +65,19 @@ try
         }
     }
 
-    var allDirs = Directory.GetDirectories(targetReposDirectory).Select(dir => new DirectoryInfo(dir).Name);
+    var allDirs = Directory.GetDirectories(targetDirectory).Select(dir => new DirectoryInfo(dir).Name);
     var repoDirs = repos.Select(repo => repo.Name);
 
     var remainingDirs = allDirs.Where(dir => !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
 
     foreach (var repo in repos)
     {
-        CloneOrUpdateRepo(targetReposDirectory, repo);
+        CloneOrUpdateRepo(targetDirectory, repo);
     }
 
     foreach (var repo in remainingDirs)
     {
-        var destinationPath = Path.Combine(targetReposDirectory, repo);
+        var destinationPath = Path.Combine(targetDirectory, repo);
         if (!Directory.Exists(Path.Combine(destinationPath, ".git")))
         {
             continue;
@@ -77,7 +91,7 @@ catch (Exception ex)
 }
 finally
 {
-    if (fails.Count > 0 && targetReposDirectory is { Length: > 0 })
+    if (fails.Count > 0 && targetDirectory is { Length: > 0 })
     {
         var sbFails = new StringBuilder();
         sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
@@ -87,21 +101,21 @@ finally
         }
 
         Console.WriteLine(sbFails);
-        File.WriteAllText(Path.Combine(targetReposDirectory, "log.txt"), sbFails.ToString());
+        File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
     }
 }
 
-void CloneOrUpdateRepo(string targetDirectory, Repository repo)
+void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
 {
     try
     {
-        var destinationPath = Path.Combine(targetDirectory, repo.Name);
+        var destinationPath = Path.Combine(targetReposDirectory, repo.Name);
         if (!Directory.Exists(destinationPath))
         {
             Console.WriteLine($"Cloning {repo.Name}");
             var process = Process.Start(new ProcessStartInfo
             {
-                WorkingDirectory = targetDirectory,
+                WorkingDirectory = targetReposDirectory,
                 FileName = "git",
                 Arguments = $"clone {repo.SshUrl} --no-tags",
                 CreateNoWindow = true
@@ -114,7 +128,7 @@ void CloneOrUpdateRepo(string targetDirectory, Repository repo)
             Console.WriteLine(process.WaitForExit(1000 * 30)
                 ? $"Repo {repo.Name} finished cloning"
                 : $"Repo {repo.Name} did not finish cloning");
-            var path = Path.Combine(targetDirectory, repo.Name);
+            var path = Path.Combine(targetReposDirectory, repo.Name);
             if (!Directory.Exists(path))
             {
                 fails.Add($"{repo.Name}: {repo.SshUrl} ({path})");
