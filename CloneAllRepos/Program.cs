@@ -23,7 +23,9 @@ try
     var credentials = new Credentials(personalAccessToken);
     var client = new GitHubClient(myUser) { Credentials = credentials };
 
-    var repos = (await client.Repository.GetAllForCurrent()).ToList();
+    var repos = (await client.Repository.GetAllForCurrent())
+        .Where(r => !r.Archived)
+        .ToList();
 
     foreach (var repo in repos.Where(r => r.Fork))
     {
