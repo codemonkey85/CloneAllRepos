@@ -229,6 +229,8 @@ resharper_normalize_tag_names = true
 # ReSharper inspection severities
 resharper_arrange_local_function_body_highlighting = suggestion
 csharp_style_prefer_top_level_statements = true:suggestion
+csharp_style_prefer_utf8_string_literals = true:suggestion
+csharp_style_prefer_readonly_struct = true:suggestion
 
 [*.{cs,vb}]
 dotnet_style_operator_placement_when_wrapping = beginning_of_line
