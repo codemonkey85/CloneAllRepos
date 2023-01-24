@@ -1,9 +1,4 @@
-﻿using System.Diagnostics;
-using System.Text;
-using Microsoft.Extensions.Configuration;
-using Octokit;
-
-IList<string> fails = new List<string>();
+﻿IList<string> fails = new List<string>();
 string? targetDirectory = null;
 
 try
