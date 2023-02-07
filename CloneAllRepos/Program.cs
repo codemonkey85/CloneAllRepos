@@ -46,7 +46,7 @@ try
                 upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}");
             if (compareResult.BehindBy > 0)
             {
-                Console.WriteLine($"Updating fork of {repo.Name}");
+                WriteLine($"Updating fork of {repo.Name}");
                 var upstreamBranchReference = await client.Git.Reference
                     .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}");
                 await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}",
@@ -55,7 +55,7 @@ try
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error with fork '{repo.Name}':");
+            WriteLine($"Error with fork '{repo.Name}':");
             LogExceptions(ex, repo.Name);
         }
     }
@@ -95,7 +95,7 @@ finally
             sbFails.AppendLine(fail);
         }
 
-        Console.WriteLine(sbFails);
+        WriteLine(sbFails);
         File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
     }
 }
@@ -107,7 +107,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         var destinationPath = Path.Combine(targetReposDirectory, repo.Name);
         if (!Directory.Exists(destinationPath))
         {
-            Console.WriteLine($"Cloning {repo.Name}");
+            WriteLine($"Cloning {repo.Name}");
             var process = Process.Start(new ProcessStartInfo
             {
                 WorkingDirectory = targetReposDirectory,
@@ -120,7 +120,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
                 throw new Exception("Cannot create process");
             }
 
-            Console.WriteLine(process.WaitForExit(1000 * 30)
+            WriteLine(process.WaitForExit(1000 * 30)
                 ? $"Repo {repo.Name} finished cloning"
                 : $"Repo {repo.Name} did not finish cloning");
             var path = Path.Combine(targetReposDirectory, repo.Name);
@@ -131,7 +131,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         }
         else
         {
-            Console.WriteLine($"Updating {repo.Name}");
+            WriteLine($"Updating {repo.Name}");
             PullRepo(destinationPath, repo.Name);
         }
     }
@@ -171,7 +171,10 @@ static void PullRepo(string workingDirectory, string repoName)
         CreateNoWindow = false
     };
 
-    Console.WriteLine($"Starting {repoName}");
-    Console.WriteLine(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
-    Console.WriteLine($"Ending {repoName}");
+    WriteLine($"Starting {repoName}");
+    WriteLine(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
+    WriteLine($"Ending {repoName}");
 }
+
+static void WriteLine(object? line) =>
+    Console.WriteLine($"{DateTime.Now:O}: {line}");
