@@ -1,3 +1,3 @@
 # CloneAllRepos
 
-Clone all repos from a user or organization
+Clone all repos from a user or organization (but mostly for me)
