@@ -145,9 +145,9 @@ void LogExceptions(Exception ex, string? repoName = null)
 {
     if (repoName is { Length: > 0 })
     {
-        Console.Error.WriteLine($"=== Error with {repoName}! ===");
+        WriteError($"=== Error with {repoName}! ===");
     }
-    Console.Error.WriteLine(ex);
+    WriteError(ex);
     while (true)
     {
         var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
@@ -178,3 +178,6 @@ static void PullRepo(string workingDirectory, string repoName)
 
 static void WriteLine(object? line) =>
     Console.WriteLine($"{DateTime.Now:O}: {line}");
+
+static void WriteError(object? line) =>
+    Console.Error.WriteLine($"{DateTime.Now:O}: {line}");
