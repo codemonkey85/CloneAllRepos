@@ -46,7 +46,7 @@ try
                 upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}");
             if (compareResult.BehindBy > 0)
             {
-                WriteLine($"Updating fork of {repo.Name}");
+                WriteLog($"Updating fork of {repo.Name}");
                 var upstreamBranchReference = await client.Git.Reference
                     .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}");
                 await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}",
@@ -55,7 +55,7 @@ try
         }
         catch (Exception ex)
         {
-            WriteLine($"Error with fork '{repo.Name}':");
+            WriteLog($"Error with fork '{repo.Name}':", true);
             LogExceptions(ex, repo.Name);
         }
     }
@@ -95,7 +95,7 @@ finally
             sbFails.AppendLine(fail);
         }
 
-        WriteLine(sbFails);
+        WriteLog(sbFails);
         File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
     }
 }
@@ -107,7 +107,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         var destinationPath = Path.Combine(targetReposDirectory, repo.Name);
         if (!Directory.Exists(destinationPath))
         {
-            WriteLine($"Cloning {repo.Name}");
+            WriteLog($"Cloning {repo.Name}");
             var process = Process.Start(new ProcessStartInfo
             {
                 WorkingDirectory = targetReposDirectory,
@@ -120,7 +120,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
                 throw new Exception("Cannot create process");
             }
 
-            WriteLine(process.WaitForExit(1000 * 30)
+            WriteLog(process.WaitForExit(1000 * 30)
                 ? $"Repo {repo.Name} finished cloning"
                 : $"Repo {repo.Name} did not finish cloning");
             var path = Path.Combine(targetReposDirectory, repo.Name);
@@ -131,7 +131,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         }
         else
         {
-            WriteLine($"Updating {repo.Name}");
+            WriteLog($"Updating {repo.Name}");
             PullRepo(destinationPath, repo.Name);
         }
     }
@@ -145,9 +145,9 @@ void LogExceptions(Exception ex, string? repoName = null)
 {
     if (repoName is { Length: > 0 })
     {
-        WriteError($"=== Error with {repoName}! ===");
+        WriteLog($"=== Error with {repoName}! ===", true);
     }
-    WriteError(ex);
+    WriteLog(ex, true);
     while (true)
     {
         var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
@@ -171,13 +171,13 @@ static void PullRepo(string workingDirectory, string repoName)
         CreateNoWindow = false
     };
 
-    WriteLine($"Starting {repoName}");
-    WriteLine(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
-    WriteLine($"Ending {repoName}");
+    WriteLog($"Starting {repoName}");
+    WriteLog(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
+    WriteLog($"Ending {repoName}");
 }
 
-static void WriteLine(object? line) =>
-    Console.WriteLine($"{DateTime.Now:O}: {line}");
-
-static void WriteError(object? line) =>
-    Console.Error.WriteLine($"{DateTime.Now:O}: {line}");
+static void WriteLog(object? message, bool isError = false)
+{
+    Action<object?> logMethod = isError ? Console.Error.WriteLine : Console.Out.WriteLine;
+    logMethod($"{DateTime.Now:O}: {message}");
+}
