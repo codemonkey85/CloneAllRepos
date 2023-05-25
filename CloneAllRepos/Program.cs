@@ -114,15 +114,12 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
                 FileName = "git",
                 Arguments = $"clone {repo.SshUrl} --no-tags",
                 CreateNoWindow = true
-            });
-            if (process is null)
-            {
-                throw new Exception("Cannot create process");
-            }
+            }) ?? throw new Exception("Cannot create process");
 
             WriteLog(process.WaitForExit(1000 * 30)
                 ? $"Repo {repo.Name} finished cloning"
                 : $"Repo {repo.Name} did not finish cloning");
+
             var path = Path.Combine(targetReposDirectory, repo.Name);
             if (!Directory.Exists(path))
             {
@@ -176,8 +173,5 @@ static void PullRepo(string workingDirectory, string repoName)
     WriteLog($"Ending {repoName}");
 }
 
-static void WriteLog(object? message, bool isError = false)
-{
-    Action<object?> logMethod = isError ? Console.Error.WriteLine : Console.Out.WriteLine;
-    logMethod($"{DateTime.Now:O}: {message}");
-}
+static void WriteLog(object? message, bool isError = false) =>
+    ((Action<object?>)(isError ? Console.Error.WriteLine : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
