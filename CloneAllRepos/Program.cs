@@ -1,5 +1,6 @@
 ﻿IList<string> fails = new List<string>();
 string? targetDirectory = null;
+var logBuilder = new StringBuilder();
 
 try
 {
@@ -173,5 +174,11 @@ static void PullRepo(string workingDirectory, string repoName)
     WriteLog($"Ending {repoName}");
 }
 
-static void WriteLog(object? message, bool isError = false) =>
+void WriteLog(object? message, bool isError = false)
+{
+    if (message is not null)
+    {
+        logBuilder.AppendLine($"{DateTime.Now:O}: {message}");
+    }
     ((Action<object?>)(isError ? Console.Error.WriteLine : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
+}
