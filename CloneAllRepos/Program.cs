@@ -176,9 +176,6 @@ static void PullRepo(string workingDirectory, string repoName)
 
 void WriteLog(object? message, bool isError = false)
 {
-    if (message is not null)
-    {
-        logBuilder.AppendLine($"{DateTime.Now:O}: {message}");
-    }
+    logBuilder.AppendLine($"{DateTime.Now:O}: {message}");
     ((Action<object?>)(isError ? Console.Error.WriteLine : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
 }
