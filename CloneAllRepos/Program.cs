@@ -159,7 +159,7 @@ void LogExceptions(Exception ex, string? repoName = null)
     }
 }
 
-static void PullRepo(string workingDirectory, string repoName)
+void PullRepo(string workingDirectory, string repoName)
 {
     var processStartInfo = new ProcessStartInfo
     {
