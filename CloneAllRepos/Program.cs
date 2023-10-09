@@ -97,7 +97,7 @@ finally
         }
 
         WriteLog(sbFails);
-        File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), sbFails.ToString());
+        File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), logBuilder.ToString());
     }
 }
 
