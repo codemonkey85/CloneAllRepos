@@ -1,4 +1,4 @@
-﻿IList<string> fails = new List<string>();
+﻿List<string> fails = [];
 string? targetDirectory = null;
 var logBuilder = new StringBuilder();
 
