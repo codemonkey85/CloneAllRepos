@@ -78,6 +78,7 @@ try
         {
             continue;
         }
+
         PullRepo(destinationPath, repo);
     }
 }
@@ -145,6 +146,7 @@ void LogExceptions(Exception ex, string? repoName = null)
     {
         WriteLog($"=== Error with {repoName}! ===", true);
     }
+
     WriteLog(ex, true);
     while (true)
     {
@@ -155,6 +157,7 @@ void LogExceptions(Exception ex, string? repoName = null)
             ex = ex.InnerException;
             continue;
         }
+
         break;
     }
 }
@@ -163,10 +166,7 @@ void PullRepo(string workingDirectory, string repoName)
 {
     var processStartInfo = new ProcessStartInfo
     {
-        WorkingDirectory = workingDirectory,
-        FileName = "git",
-        Arguments = "pull",
-        CreateNoWindow = false
+        WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false
     };
 
     WriteLog($"Starting {repoName}");
@@ -177,5 +177,7 @@ void PullRepo(string workingDirectory, string repoName)
 void WriteLog(object? message, bool isError = false)
 {
     logBuilder.AppendLine($"{DateTime.Now:O}: {message}");
-    ((Action<object?>)(isError ? Console.Error.WriteLine : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
+    ((Action<object?>)(isError
+        ? Console.Error.WriteLine
+        : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
 }
