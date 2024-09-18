@@ -88,7 +88,7 @@ catch (Exception ex)
 }
 finally
 {
-    if (fails.Count > 0 && targetDirectory is { Length: > 0 })
+    if (fails.Count > 0)
     {
         var sbFails = new StringBuilder();
         sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
@@ -98,6 +98,10 @@ finally
         }
 
         WriteLog(sbFails);
+    }
+
+    if (targetDirectory is { Length: > 0 })
+    {
         File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), logBuilder.ToString());
     }
 }
