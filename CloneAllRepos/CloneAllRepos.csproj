@@ -8,6 +8,10 @@
 		<UserSecretsId>96a99f2a-352e-4a43-84f4-19e98cc30a61</UserSecretsId>
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<None Remove="appsettings.json" />
 		<None Remove="Microsoft.Extensions.Hosting" />
