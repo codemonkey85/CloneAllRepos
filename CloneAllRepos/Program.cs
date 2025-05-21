@@ -11,22 +11,30 @@ try
         .AddCommandLine(args)
         .Build();
 
-    targetDirectory = config.GetValue(nameof(targetDirectory), string.Empty);
+    var appConfig = config.Get<AppConfig>() ?? throw new Exception("Failed to bind appsettings.json to AppConfig");
+
+    targetDirectory = appConfig.TargetDirectory;
     if (targetDirectory is not { Length: > 0 })
     {
         throw new Exception($"{nameof(targetDirectory)} is not set");
     }
 
-    string? githubUserName = config.GetValue(nameof(githubUserName), string.Empty);
+    var githubUserName = appConfig.GithubUserName;
     if (githubUserName is not { Length: > 0 })
     {
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    string? personalAccessToken = config.GetValue(nameof(personalAccessToken), string.Empty);
+    var personalAccessToken = appConfig.PersonalAccessToken;
     if (personalAccessToken is not { Length: > 0 })
     {
         throw new Exception($"{nameof(personalAccessToken)} is not set");
+    }
+
+    var ownersToInclude = appConfig.OwnersToInclude;
+    if (ownersToInclude is not { Count: > 0 })
+    {
+        ownersToInclude = [githubUserName];
     }
 
     var myUser = new ProductHeaderValue(githubUserName);
@@ -34,7 +42,7 @@ try
     var client = new GitHubClient(myUser) { Credentials = credentials };
 
     var repos = (await client.Repository.GetAllForCurrent())
-        .Where(r => !r.Archived)
+        .Where(repo => !repo.Archived && ownersToInclude.Contains(repo.Owner.Login, StringComparer.OrdinalIgnoreCase))
         .ToList();
 
     foreach (var repo in repos.Where(r => r.Fork))
@@ -114,13 +122,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         if (!Directory.Exists(destinationPath))
         {
             WriteLog($"Cloning {repo.Name}");
-            var process = Process.Start(new ProcessStartInfo
-            {
-                WorkingDirectory = targetReposDirectory,
-                FileName = "git",
-                Arguments = $"clone {repo.SshUrl} --no-tags",
-                CreateNoWindow = true
-            }) ?? throw new Exception("Cannot create process");
+            var process = Process.Start(new ProcessStartInfo { WorkingDirectory = targetReposDirectory, FileName = "git", Arguments = $"clone {repo.SshUrl} --no-tags", CreateNoWindow = true }) ?? throw new Exception("Cannot create process");
 
             WriteLog(process.WaitForExit(1000 * 30)
                 ? $"Repo {repo.Name} finished cloning"
@@ -168,10 +170,7 @@ void LogExceptions(Exception ex, string? repoName = null)
 
 void PullRepo(string workingDirectory, string repoName)
 {
-    var processStartInfo = new ProcessStartInfo
-    {
-        WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false
-    };
+    var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false };
 
     WriteLog($"Starting {repoName}");
     WriteLog(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
