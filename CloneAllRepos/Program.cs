@@ -1,5 +1,4 @@
 ﻿List<string> fails = [];
-string? targetDirectory = null;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -16,7 +15,7 @@ try
 
     var appConfig = config.Get<AppConfig>() ?? throw new Exception("Failed to bind appsettings.json to AppConfig");
 
-    targetDirectory = appConfig.TargetDirectory;
+    var targetDirectory = appConfig.TargetDirectory;
     if (targetDirectory is not { Length: > 0 })
     {
         throw new Exception($"{nameof(targetDirectory)} is not set");
