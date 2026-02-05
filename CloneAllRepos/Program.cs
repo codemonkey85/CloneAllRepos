@@ -21,9 +21,15 @@ try
         throw new Exception($"{nameof(targetDirectory)} is not set");
     }
 
+    var logPath = Path.Combine(targetDirectory, "log.txt");
+    if (File.Exists(logPath))
+    {
+        File.Delete(logPath);
+    }
+
     Log.Logger = new LoggerConfiguration()
         .WriteTo.Console()
-        .WriteTo.File(Path.Combine(targetDirectory, "log.txt"))
+        .WriteTo.File(logPath)
         .CreateLogger();
 
     var githubUserName = appConfig.GithubUserName;
