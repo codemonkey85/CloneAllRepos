@@ -1,6 +1,9 @@
 ﻿List<string> fails = [];
 string? targetDirectory = null;
-var logBuilder = new StringBuilder();
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
 
 try
 {
@@ -18,6 +21,11 @@ try
     {
         throw new Exception($"{nameof(targetDirectory)} is not set");
     }
+
+    Log.Logger = new LoggerConfiguration()
+        .WriteTo.Console()
+        .WriteTo.File(Path.Combine(targetDirectory, "log.txt"))
+        .CreateLogger();
 
     var githubUserName = appConfig.GithubUserName;
     if (githubUserName is not { Length: > 0 })
@@ -55,7 +63,7 @@ try
                 upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}");
             if (compareResult.BehindBy > 0)
             {
-                WriteLog($"Updating fork of {repo.Name}");
+                Log.Information("Updating fork of {RepoName}", repo.Name);
                 var upstreamBranchReference = await client.Git.Reference
                     .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}");
                 await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}",
@@ -64,7 +72,7 @@ try
         }
         catch (Exception ex)
         {
-            WriteLog($"Error with fork '{repo.Name}':", true);
+            Log.Error(ex, "Error with fork '{RepoName}'", repo.Name);
             LogExceptions(ex, repo.Name);
         }
     }
@@ -98,20 +106,14 @@ finally
 {
     if (fails.Count > 0)
     {
-        var sbFails = new StringBuilder();
-        sbFails.AppendLine($"{Environment.NewLine}Fails:{Environment.NewLine}");
+        Log.Warning("Failures occurred:");
         foreach (var fail in fails)
         {
-            sbFails.AppendLine(fail);
+            Log.Warning("{FailureDetails}", fail);
         }
-
-        WriteLog(sbFails);
     }
 
-    if (targetDirectory is { Length: > 0 })
-    {
-        File.WriteAllText(Path.Combine(targetDirectory, "log.txt"), logBuilder.ToString());
-    }
+    Log.CloseAndFlush();
 }
 
 void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
@@ -121,12 +123,12 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         var destinationPath = Path.Combine(targetReposDirectory, repo.Name);
         if (!Directory.Exists(destinationPath))
         {
-            WriteLog($"Cloning {repo.Name}");
+            Log.Information("Cloning {RepoName}", repo.Name);
             var process = Process.Start(new ProcessStartInfo { WorkingDirectory = targetReposDirectory, FileName = "git", Arguments = $"clone {repo.SshUrl} --no-tags", CreateNoWindow = true }) ?? throw new Exception("Cannot create process");
 
-            WriteLog(process.WaitForExit(1000 * 30)
-                ? $"Repo {repo.Name} finished cloning"
-                : $"Repo {repo.Name} did not finish cloning");
+            Log.Information(process.WaitForExit(1000 * 30)
+                ? "Repo {RepoName} finished cloning"
+                : "Repo {RepoName} did not finish cloning", repo.Name);
 
             var path = Path.Combine(targetReposDirectory, repo.Name);
             if (!Directory.Exists(path))
@@ -136,7 +138,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         }
         else
         {
-            WriteLog($"Updating {repo.Name}");
+            Log.Information("Updating {RepoName}", repo.Name);
             PullRepo(destinationPath, repo.Name);
         }
     }
@@ -150,10 +152,13 @@ void LogExceptions(Exception ex, string? repoName = null)
 {
     if (repoName is { Length: > 0 })
     {
-        WriteLog($"=== Error with {repoName}! ===", true);
+        Log.Error(ex, "Error with {RepoName}", repoName);
+    }
+    else
+    {
+        Log.Error(ex, "Error occurred");
     }
 
-    WriteLog(ex, true);
     while (true)
     {
         var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
@@ -172,15 +177,7 @@ void PullRepo(string workingDirectory, string repoName)
 {
     var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false };
 
-    WriteLog($"Starting {repoName}");
-    WriteLog(Process.Start(processStartInfo)?.WaitForExit(1000 * 30));
-    WriteLog($"Ending {repoName}");
-}
-
-void WriteLog(object? message, bool isError = false)
-{
-    logBuilder.AppendLine($"{DateTime.Now:O}: {message}");
-    ((Action<object?>)(isError
-        ? Console.Error.WriteLine
-        : Console.Out.WriteLine))($"{DateTime.Now:O}: {message}");
+    Log.Information("Starting pull for {RepoName}", repoName);
+    Process.Start(processStartInfo)?.WaitForExit(1000 * 30);
+    Log.Information("Ending pull for {RepoName}", repoName);
 }
