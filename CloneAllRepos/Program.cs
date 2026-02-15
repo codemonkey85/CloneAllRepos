@@ -166,7 +166,9 @@ void LogExceptions(Exception ex, string? repoName = null)
 
     while (true)
     {
-        var errorLine = $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
+        var errorLine = repoName is { Length: > 0 }
+            ? $"{repoName}: {ex.Message}{Environment.NewLine}{ex.StackTrace}"
+            : $"{ex.Message}{Environment.NewLine}{ex.StackTrace}";
         fails.Add(errorLine);
         if (ex.InnerException is not null)
         {
