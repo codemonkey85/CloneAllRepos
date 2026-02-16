@@ -1,9 +1,5 @@
 ﻿List<string> fails = [];
 
-Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
-    .CreateLogger();
-
 try
 {
     IConfiguration config = new ConfigurationBuilder()
@@ -21,15 +17,14 @@ try
         throw new Exception($"{nameof(targetDirectory)} is not set");
     }
 
-    var logPath = Path.Combine(targetDirectory, "log.txt");
-    if (File.Exists(logPath))
-    {
-        File.Delete(logPath);
-    }
+    var logPath = Path.Combine(targetDirectory, "log_.txt");
 
     Log.Logger = new LoggerConfiguration()
         .WriteTo.Console()
-        .WriteTo.File(logPath)
+        .WriteTo.File(
+            logPath,
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 1)
         .CreateLogger();
 
     var githubUserName = appConfig.GithubUserName;
