@@ -1,4 +1,6 @@
-﻿List<string> fails = [];
+List<string> fails = [];
+
+var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
 try
 {
@@ -33,10 +35,14 @@ try
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    var personalAccessToken = appConfig.PersonalAccessToken;
-    if (personalAccessToken is not { Length: > 0 })
+    var authCheck = Process.Start(new ProcessStartInfo
     {
-        throw new Exception($"{nameof(personalAccessToken)} is not set");
+        FileName = "gh", Arguments = "auth status", RedirectStandardError = true, CreateNoWindow = true
+    }) ?? throw new Exception("Cannot start gh process");
+    authCheck.WaitForExit();
+    if (authCheck.ExitCode != 0)
+    {
+        throw new Exception("gh CLI is not authenticated. Run 'gh auth login' first.");
     }
 
     var ownersToInclude = appConfig.OwnersToInclude;
@@ -45,36 +51,28 @@ try
         ownersToInclude = [githubUserName];
     }
 
-    var myUser = new ProductHeaderValue(githubUserName);
-    var credentials = new Credentials(personalAccessToken);
-    var client = new GitHubClient(myUser) { Credentials = credentials };
-
-    var repos = (await client.Repository.GetAllForCurrent())
-        .Where(repo => !repo.Archived && ownersToInclude.Contains(repo.Owner.Login, StringComparer.OrdinalIgnoreCase))
-        .ToList();
-
-    foreach (var repo in repos.Where(r => r.Fork))
+    List<GitHubRepo> repos = [];
+    foreach (var owner in ownersToInclude)
     {
-        try
+        const int repoLimit = 20;
+        var listProcess = Process.Start(new ProcessStartInfo
         {
-            var fork = await client.Repository.Get(githubUserName, repo.Name);
-            var upstream = fork.Parent;
-            var compareResult = await client.Repository.Commit.Compare(upstream.Owner.Login, upstream.Name,
-                upstream.DefaultBranch, $"{fork.Owner.Login}:{fork.DefaultBranch}");
-            if (compareResult.BehindBy > 0)
-            {
-                Log.Information("Updating fork of {RepoName}", repo.Name);
-                var upstreamBranchReference = await client.Git.Reference
-                    .Get(upstream.Owner.Login, upstream.Name, $"heads/{upstream.DefaultBranch}");
-                await client.Git.Reference.Update(fork.Owner.Login, fork.Name, $"heads/{fork.DefaultBranch}",
-                    new ReferenceUpdate(upstreamBranchReference.Object.Sha));
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error with fork '{RepoName}'", repo.Name);
-            LogExceptions(ex, repo.Name);
-        }
+            FileName = "gh",
+            Arguments = $"repo list {owner} --json name,owner,isFork,isArchived,sshUrl --limit {repoLimit}",
+            RedirectStandardOutput = true,
+            CreateNoWindow = true
+        }) ?? throw new Exception("Cannot start gh process");
+
+        var json = await listProcess.StandardOutput.ReadToEndAsync();
+        listProcess.WaitForExit();
+
+        var ownerRepos = JsonSerializer.Deserialize<List<GitHubRepo>>(json, jsonOptions) ?? [];
+        repos.AddRange(ownerRepos.Where(r => !r.IsArchived));
+    }
+
+    foreach (var repo in repos.Where(r => r.IsFork))
+    {
+        await SyncForkAsync(repo, appConfig.ForceSyncRepos);
     }
 
     var allDirs = Directory.GetDirectories(targetDirectory).Select(dir => new DirectoryInfo(dir).Name);
@@ -116,7 +114,89 @@ finally
     Log.CloseAndFlush();
 }
 
-void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
+async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
+{
+    var useForce = forceSyncRepos.Contains(repo.Name, StringComparer.OrdinalIgnoreCase);
+    var forceFlag = useForce
+        ? " --force"
+        : string.Empty;
+    var repoRef = $"{repo.Owner.Login}/{repo.Name}";
+
+    const int maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            Log.Information("Syncing fork {RepoName} (attempt {Attempt}/{Max})", repo.Name, attempt, maxAttempts);
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "gh",
+                Arguments = $"repo sync{forceFlag} {repoRef}",
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            }) ?? throw new Exception("Cannot start gh process");
+
+            var stderr = await process.StandardError.ReadToEndAsync();
+            process.WaitForExit(1000 * 30);
+
+            if (process.ExitCode == 0)
+            {
+                Log.Information("Fork {RepoName} synced successfully", repo.Name);
+                return;
+            }
+
+            if (IsPermanentError(stderr))
+            {
+                Log.Error("Fork '{RepoName}' cannot be synced: {Error}", repo.Name, stderr.Trim());
+                fails.Add($"{repo.Name}: {stderr.Trim()}");
+                return;
+            }
+
+            if (IsDivergedError(stderr))
+            {
+                Log.Warning(
+                    "Fork '{RepoName}' has diverged from upstream and cannot be synced automatically. " +
+                    "To force-sync (discarding local changes): gh repo sync --force {RepoRef}",
+                    repo.Name, repoRef);
+                fails.Add($"{repo.Name}: fork has diverged (gh repo sync --force {repoRef})");
+                return;
+            }
+
+            // Transient failure — retry with backoff
+            if (attempt < maxAttempts)
+            {
+                var delay = (int)Math.Pow(2, attempt) * 1000;
+                Log.Warning("Transient error syncing fork '{RepoName}', retrying in {Delay}ms: {Error}",
+                    repo.Name, delay, stderr.Trim());
+                await Task.Delay(delay);
+            }
+            else
+            {
+                Log.Error("Fork '{RepoName}' failed to sync after {Max} attempts: {Error}",
+                    repo.Name, maxAttempts, stderr.Trim());
+                fails.Add($"{repo.Name}: {stderr.Trim()}");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogExceptions(ex, repo.Name);
+            return;
+        }
+    }
+}
+
+bool IsPermanentError(string stderr) =>
+    stderr.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+    stderr.Contains("not have permission", StringComparison.OrdinalIgnoreCase) ||
+    stderr.Contains("permission denied", StringComparison.OrdinalIgnoreCase);
+
+bool IsDivergedError(string stderr) =>
+    stderr.Contains("diverged", StringComparison.OrdinalIgnoreCase) ||
+    stderr.Contains("not possible to fast-forward", StringComparison.OrdinalIgnoreCase) ||
+    stderr.Contains("not a fast-forward", StringComparison.OrdinalIgnoreCase);
+
+void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
 {
     try
     {
@@ -124,7 +204,14 @@ void CloneOrUpdateRepo(string targetReposDirectory, Repository repo)
         if (!Directory.Exists(destinationPath))
         {
             Log.Information("Cloning {RepoName}", repo.Name);
-            var process = Process.Start(new ProcessStartInfo { WorkingDirectory = targetReposDirectory, FileName = "git", Arguments = $"clone {repo.SshUrl} --no-tags", CreateNoWindow = true }) ?? throw new Exception("Cannot create process");
+            var process =
+                Process.Start(new ProcessStartInfo
+                {
+                    WorkingDirectory = targetReposDirectory,
+                    FileName = "git",
+                    Arguments = $"clone {repo.SshUrl} --no-tags",
+                    CreateNoWindow = true
+                }) ?? throw new Exception("Cannot create process");
 
             Log.Information(process.WaitForExit(1000 * 30)
                 ? "Repo {RepoName} finished cloning"
@@ -177,7 +264,10 @@ void LogExceptions(Exception ex, string? repoName = null)
 
 void PullRepo(string workingDirectory, string repoName)
 {
-    var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false };
+    var processStartInfo = new ProcessStartInfo
+    {
+        WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false
+    };
 
     Log.Information("Starting pull for {RepoName}", repoName);
     Process.Start(processStartInfo)?.WaitForExit(1000 * 30);
