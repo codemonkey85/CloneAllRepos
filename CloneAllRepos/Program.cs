@@ -77,7 +77,8 @@ try
             Arguments = $"repo list {owner} --json name,owner,isFork,isArchived,sshUrl --limit {repoLimit}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            UseShellExecute = false
         }) ?? throw new Exception("Cannot start gh process");
 
         const int repoListTimeoutMs = 60_000;
@@ -202,14 +203,15 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
     {
         try
         {
-            Log.Information("Syncing fork {RepoName} (attempt {Attempt}/{Max})", repo.Name, attempt, maxAttempts);
+            Log.Information("Syncing fork {RepoRef} (attempt {Attempt}/{Max})", repoRef, attempt, maxAttempts);
 
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "gh",
                 Arguments = $"repo sync{forceFlag} {repoRef}",
                 RedirectStandardError = true,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                UseShellExecute = false
             }) ?? throw new Exception("Cannot start gh process");
 
             var stderrTask = process.StandardError.ReadToEndAsync();
@@ -223,8 +225,8 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
                 try { process.Kill(); } catch { /* Ignore */ }
                 // Await stderrTask with a bounded timeout so a hung process can't block indefinitely.
                 try { await stderrTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { /* Ignore */ }
-                Log.Warning("Syncing fork '{RepoName}' timed out on attempt {Attempt}/{Max}",
-                    repo.Name, attempt, maxAttempts);
+                Log.Warning("Syncing fork '{RepoRef}' timed out on attempt {Attempt}/{Max}",
+                    repoRef, attempt, maxAttempts);
                 if (attempt < maxAttempts)
                 {
                     var delay = (int)Math.Pow(2, attempt) * 1000;
@@ -232,7 +234,7 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
                     continue;
                 }
 
-                fails.Add($"{repo.Name}: timed out syncing fork after {maxAttempts} attempts");
+                fails.Add($"{repoRef}: timed out syncing fork after {maxAttempts} attempts");
                 return;
             }
 
@@ -240,24 +242,24 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
 
             if (process.ExitCode == 0)
             {
-                Log.Information("Fork {RepoName} synced successfully", repo.Name);
+                Log.Information("Fork {RepoRef} synced successfully", repoRef);
                 return;
             }
 
             if (IsPermanentError(stderr))
             {
-                Log.Error("Fork '{RepoName}' cannot be synced: {Error}", repo.Name, stderr.Trim());
-                fails.Add($"{repo.Name}: {stderr.Trim()}");
+                Log.Error("Fork '{RepoRef}' cannot be synced: {Error}", repoRef, stderr.Trim());
+                fails.Add($"{repoRef}: {stderr.Trim()}");
                 return;
             }
 
             if (IsDivergedError(stderr))
             {
                 Log.Warning(
-                    "Fork '{RepoName}' has diverged from upstream and cannot be synced automatically. " +
+                    "Fork '{RepoRef}' has diverged from upstream and cannot be synced automatically. " +
                     "To force-sync (discarding local changes): gh repo sync --force {RepoRef}",
-                    repo.Name, repoRef);
-                fails.Add($"{repo.Name}: fork has diverged (gh repo sync --force {repoRef})");
+                    repoRef, repoRef);
+                fails.Add($"{repoRef}: fork has diverged (gh repo sync --force {repoRef})");
                 return;
             }
 
@@ -265,20 +267,20 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
             if (attempt < maxAttempts)
             {
                 var delay = (int)Math.Pow(2, attempt) * 1000;
-                Log.Warning("Transient error syncing fork '{RepoName}', retrying in {Delay}ms: {Error}",
-                    repo.Name, delay, stderr.Trim());
+                Log.Warning("Transient error syncing fork '{RepoRef}', retrying in {Delay}ms: {Error}",
+                    repoRef, delay, stderr.Trim());
                 await Task.Delay(delay);
             }
             else
             {
-                Log.Error("Fork '{RepoName}' failed to sync after {Max} attempts: {Error}",
-                    repo.Name, maxAttempts, stderr.Trim());
-                fails.Add($"{repo.Name}: {stderr.Trim()}");
+                Log.Error("Fork '{RepoRef}' failed to sync after {Max} attempts: {Error}",
+                    repoRef, maxAttempts, stderr.Trim());
+                fails.Add($"{repoRef}: {stderr.Trim()}");
             }
         }
         catch (Exception ex)
         {
-            LogExceptions(ex, repo.Name);
+            LogExceptions(ex, repoRef);
             return;
         }
     }
