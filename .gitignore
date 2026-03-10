@@ -352,3 +352,4 @@ MigrationBackup/
 *.DS_STORE
 .idea
 .vscode
+.claude/settings.local.json
