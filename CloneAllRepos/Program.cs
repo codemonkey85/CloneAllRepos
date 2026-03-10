@@ -54,7 +54,7 @@ try
     List<GitHubRepo> repos = [];
     foreach (var owner in ownersToInclude)
     {
-        const int repoLimit = 20;
+        const int repoLimit = 1000;
         var listProcess = Process.Start(new ProcessStartInfo
         {
             FileName = "gh",
