@@ -35,7 +35,7 @@ try
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    using var authCheck = Process.Start(new ProcessStartInfo { FileName = "gh", Arguments = "auth status", RedirectStandardError = false, CreateNoWindow = true }) ?? throw new Exception("Cannot start gh process");
+    using var authCheck = Process.Start(new ProcessStartInfo { FileName = "gh", Arguments = "auth status", RedirectStandardError = false, UseShellExecute = false, CreateNoWindow = true }) ?? throw new Exception("Cannot start gh process");
 
     const int authCheckTimeoutMilliseconds = 30000;
     var exited = authCheck.WaitForExit(authCheckTimeoutMilliseconds);
@@ -63,6 +63,8 @@ try
     {
         ownersToInclude = [githubUserName];
     }
+
+    ownersToInclude = ownersToInclude.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
     var repoLimit = appConfig.RepoLimit;
     if (repoLimit <= 0)
@@ -166,8 +168,10 @@ try
     // Repos are stored under <targetDirectory>/<owner>/<repo> to avoid name collisions across owners.
     var rootLevelDirs = Directory.GetDirectories(targetDirectory);
 
-    // New layout: <owner>/<repo>
-    var newLayoutDirs = rootLevelDirs
+    // New layout: <owner>/<repo> — only treat non-git root dirs as owner folders to avoid scanning legacy repo subdirectories.
+    var ownerDirs = rootLevelDirs
+        .Where(dir => !Directory.Exists(Path.Combine(dir, ".git")));
+    var newLayoutDirs = ownerDirs
         .SelectMany(ownerDir => Directory.GetDirectories(ownerDir)
             .Select(repoDir => Path.Combine(new DirectoryInfo(ownerDir).Name, new DirectoryInfo(repoDir).Name)));
 
@@ -338,13 +342,36 @@ bool IsDivergedError(string stderr) =>
     stderr.Contains("not possible to fast-forward", StringComparison.OrdinalIgnoreCase) ||
     stderr.Contains("not a fast-forward", StringComparison.OrdinalIgnoreCase);
 
+string? GetOriginUrl(string workingDirectory)
+{
+    try
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            WorkingDirectory = workingDirectory,
+            FileName = "git",
+            Arguments = "remote get-url origin",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+        var url = process?.StandardOutput.ReadToEnd().Trim();
+        process?.WaitForExit(5000);
+        return url;
+    }
+    catch
+    {
+        return null;
+    }
+}
+
 void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
 {
     try
     {
-        // If the repo already exists at the root level (legacy layout), keep it there.
+        // If the repo already exists at the root level (legacy layout), verify the origin matches before using it.
         var rootLevelPath = Path.Combine(targetReposDirectory, repo.Name);
-        if (Directory.Exists(Path.Combine(rootLevelPath, ".git")))
+        if (Directory.Exists(Path.Combine(rootLevelPath, ".git")) && GetOriginUrl(rootLevelPath) == repo.SshUrl)
         {
             Log.Information("Updating {RepoName} (root)", repo.Name);
             PullRepo(rootLevelPath, repo.Name);
