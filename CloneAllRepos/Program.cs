@@ -67,10 +67,15 @@ try
         ownersToInclude = [githubUserName];
     }
 
+    var repoLimit = appConfig.RepoLimit;
+    if (repoLimit <= 0)
+    {
+        throw new Exception($"{nameof(appConfig.RepoLimit)} must be greater than 0 (configured value: {repoLimit}).");
+    }
+
     List<GitHubRepo> repos = [];
     foreach (var owner in ownersToInclude)
     {
-        var repoLimit = appConfig.RepoLimit;
         using var listProcess = Process.Start(new ProcessStartInfo
         {
             FileName = "gh",
@@ -147,9 +152,19 @@ try
     }
 
     // Repos are stored under <targetDirectory>/<owner>/<repo> to avoid name collisions across owners.
-    var allDirs = Directory.GetDirectories(targetDirectory)
+    var rootLevelDirs = Directory.GetDirectories(targetDirectory);
+
+    // New layout: <owner>/<repo>
+    var newLayoutDirs = rootLevelDirs
         .SelectMany(ownerDir => Directory.GetDirectories(ownerDir)
             .Select(repoDir => Path.Combine(new DirectoryInfo(ownerDir).Name, new DirectoryInfo(repoDir).Name)));
+
+    // Legacy layout: repos cloned directly under <targetDirectory>/<repo> (backward compat — kept updated but not re-homed).
+    var legacyDirs = rootLevelDirs
+        .Where(dir => Directory.Exists(Path.Combine(dir, ".git")))
+        .Select(dir => new DirectoryInfo(dir).Name);
+
+    var allDirs = newLayoutDirs.Concat(legacyDirs);
     var repoDirs = repos.Select(repo => Path.Combine(repo.Owner.Login, repo.Name));
 
     var remainingDirs = allDirs.Where(dir => !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
