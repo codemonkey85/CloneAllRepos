@@ -426,11 +426,19 @@ async Task CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
             cloneProcessStartInfo.ArgumentList.Add("clone");
             cloneProcessStartInfo.ArgumentList.Add(repo.SshUrl);
             cloneProcessStartInfo.ArgumentList.Add("--no-tags");
-            var process = Process.Start(cloneProcessStartInfo) ?? throw new Exception("Cannot create process");
+            using var process = Process.Start(cloneProcessStartInfo) ?? throw new Exception("Cannot create process");
 
-            Log.Information(process.WaitForExit(1000 * 30)
-                ? "Repo {RepoName} finished cloning"
-                : "Repo {RepoName} did not finish cloning", repo.Name);
+            var cloned = process.WaitForExit(1000 * 30);
+            if (!cloned)
+            {
+                try { process.Kill(); } catch { /* best effort */ }
+                var repoRef = $"{repo.Owner.Login}/{repo.Name}";
+                Log.Error("Repo {RepoRef} did not finish cloning within the timeout; process killed", repoRef);
+                fails.Add($"{repoRef}: clone timed out ({destinationPath})");
+                return;
+            }
+
+            Log.Information("Repo {RepoName} finished cloning", repo.Name);
 
             if (!Directory.Exists(destinationPath))
             {
