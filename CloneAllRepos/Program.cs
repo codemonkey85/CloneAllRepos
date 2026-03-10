@@ -100,6 +100,9 @@ try
                 Log.Warning(ex, "Failed to kill timed-out gh process for owner {Owner}", owner);
             }
 
+            // Observe the pending read tasks to prevent unobserved task exceptions after kill.
+            try { await completionTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { /* Ignore */ }
+
             fails.Add($"Owner '{owner}': gh repo list timed out after {repoListTimeoutMs} ms.");
             Log.Error("gh repo list for owner {Owner} timed out after {TimeoutMs} ms.", owner, repoListTimeoutMs);
             continue;
@@ -142,8 +145,11 @@ try
         await SyncForkAsync(repo, appConfig.ForceSyncRepos);
     }
 
-    var allDirs = Directory.GetDirectories(targetDirectory).Select(dir => new DirectoryInfo(dir).Name);
-    var repoDirs = repos.Select(repo => repo.Name);
+    // Repos are stored under <targetDirectory>/<owner>/<repo> to avoid name collisions across owners.
+    var allDirs = Directory.GetDirectories(targetDirectory)
+        .SelectMany(ownerDir => Directory.GetDirectories(ownerDir)
+            .Select(repoDir => Path.Combine(new DirectoryInfo(ownerDir).Name, new DirectoryInfo(repoDir).Name)));
+    var repoDirs = repos.Select(repo => Path.Combine(repo.Owner.Login, repo.Name));
 
     var remainingDirs = allDirs.Where(dir => !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
 
@@ -152,15 +158,15 @@ try
         CloneOrUpdateRepo(targetDirectory, repo);
     }
 
-    foreach (var repo in remainingDirs)
+    foreach (var repoRelPath in remainingDirs)
     {
-        var destinationPath = Path.Combine(targetDirectory, repo);
+        var destinationPath = Path.Combine(targetDirectory, repoRelPath);
         if (!Directory.Exists(Path.Combine(destinationPath, ".git")))
         {
             continue;
         }
 
-        PullRepo(destinationPath, repo);
+        PullRepo(destinationPath, repoRelPath);
     }
 }
 catch (Exception ex)
@@ -215,7 +221,8 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
             catch (OperationCanceledException)
             {
                 try { process.Kill(); } catch { /* Ignore */ }
-                var _ = await stderrTask;
+                // Await stderrTask with a bounded timeout so a hung process can't block indefinitely.
+                try { await stderrTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { /* Ignore */ }
                 Log.Warning("Syncing fork '{RepoName}' timed out on attempt {Attempt}/{Max}",
                     repo.Name, attempt, maxAttempts);
                 if (attempt < maxAttempts)
@@ -291,14 +298,16 @@ void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
 {
     try
     {
-        var destinationPath = Path.Combine(targetReposDirectory, repo.Name);
+        var ownerDir = Path.Combine(targetReposDirectory, repo.Owner.Login);
+        Directory.CreateDirectory(ownerDir);
+        var destinationPath = Path.Combine(ownerDir, repo.Name);
         if (!Directory.Exists(destinationPath))
         {
             Log.Information("Cloning {RepoName}", repo.Name);
             var process =
                 Process.Start(new ProcessStartInfo
                 {
-                    WorkingDirectory = targetReposDirectory,
+                    WorkingDirectory = ownerDir,
                     FileName = "git",
                     Arguments = $"clone {repo.SshUrl} --no-tags",
                     CreateNoWindow = true
@@ -308,10 +317,9 @@ void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
                 ? "Repo {RepoName} finished cloning"
                 : "Repo {RepoName} did not finish cloning", repo.Name);
 
-            var path = Path.Combine(targetReposDirectory, repo.Name);
-            if (!Directory.Exists(path))
+            if (!Directory.Exists(destinationPath))
             {
-                fails.Add($"{repo.Name}: {repo.SshUrl} ({path})");
+                fails.Add($"{repo.Name}: {repo.SshUrl} ({destinationPath})");
             }
         }
         else
