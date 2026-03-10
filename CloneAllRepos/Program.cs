@@ -35,7 +35,7 @@ try
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    var authCheck = Process.Start(new ProcessStartInfo
+    using var authCheck = Process.Start(new ProcessStartInfo
     {
         FileName = "gh", Arguments = "auth status", RedirectStandardError = false, CreateNoWindow = true
     }) ?? throw new Exception("Cannot start gh process");
@@ -70,8 +70,8 @@ try
     List<GitHubRepo> repos = [];
     foreach (var owner in ownersToInclude)
     {
-        const int repoLimit = 1000;
-        var listProcess = Process.Start(new ProcessStartInfo
+        var repoLimit = appConfig.RepoLimit;
+        using var listProcess = Process.Start(new ProcessStartInfo
         {
             FileName = "gh",
             Arguments = $"repo list {owner} --json name,owner,isFork,isArchived,sshUrl --limit {repoLimit}",
@@ -107,7 +107,14 @@ try
 
         var json = await stdoutTask;
         var repoListStderr = await stderrTask;
-        listProcess.WaitForExit();
+
+        if (!listProcess.WaitForExit(5000))
+        {
+            try { if (!listProcess.HasExited) listProcess.Kill(); } catch { /* Ignore */ }
+            fails.Add($"Owner '{owner}': gh repo list process did not exit cleanly.");
+            Log.Error("gh repo list for owner {Owner} did not exit cleanly after streams closed.", owner);
+            continue;
+        }
 
         if (listProcess.ExitCode != 0)
         {
@@ -118,6 +125,15 @@ try
         }
 
         var ownerRepos = JsonSerializer.Deserialize<List<GitHubRepo>>(json, jsonOptions) ?? [];
+
+        if (ownerRepos.Count >= repoLimit)
+        {
+            Log.Warning(
+                "Owner {Owner} returned {Count} repos which equals the configured limit — some repos may be omitted. " +
+                "Increase RepoLimit in configuration to fetch more.",
+                owner, ownerRepos.Count);
+        }
+
         repos.AddRange(ownerRepos.Where(r => !r.IsArchived));
     }
 
@@ -182,7 +198,7 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
         {
             Log.Information("Syncing fork {RepoName} (attempt {Attempt}/{Max})", repo.Name, attempt, maxAttempts);
 
-            var process = Process.Start(new ProcessStartInfo
+            using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "gh",
                 Arguments = $"repo sync{forceFlag} {repoRef}",

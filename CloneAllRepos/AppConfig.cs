@@ -9,4 +9,6 @@ public class AppConfig
     public List<string> OwnersToInclude { get; init; } = [];
 
     public List<string> ForceSyncRepos { get; init; } = [];
+
+    public int RepoLimit { get; init; } = 1000;
 }
