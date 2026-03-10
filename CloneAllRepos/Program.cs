@@ -176,11 +176,12 @@ try
         .Where(dir => Directory.Exists(Path.Combine(dir, ".git")))
         .Select(dir => new DirectoryInfo(dir).Name);
 
-    var allDirs = newLayoutDirs.Concat(legacyDirs);
+    var legacyDirsList = legacyDirs.ToList();
+    var allDirs = newLayoutDirs.Concat(legacyDirsList);
     var repoDirs = repos.Select(repo => Path.Combine(repo.Owner.Login, repo.Name));
 
     var repoNames = repos.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-    var handledLegacyDirs = legacyDirs.Where(name => repoNames.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var handledLegacyDirs = legacyDirsList.Where(name => repoNames.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase).ToList();
     var remainingDirs = allDirs.Where(dir =>
         !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase) &&
         !handledLegacyDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
