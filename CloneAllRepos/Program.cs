@@ -37,9 +37,25 @@ try
 
     var authCheck = Process.Start(new ProcessStartInfo
     {
-        FileName = "gh", Arguments = "auth status", RedirectStandardError = true, CreateNoWindow = true
+        FileName = "gh", Arguments = "auth status", RedirectStandardError = false, CreateNoWindow = true
     }) ?? throw new Exception("Cannot start gh process");
-    authCheck.WaitForExit();
+
+    const int authCheckTimeoutMilliseconds = 30000;
+    var exited = authCheck.WaitForExit(authCheckTimeoutMilliseconds);
+    if (!exited)
+    {
+        try
+        {
+            authCheck.Kill();
+        }
+        catch
+        {
+            // Ignore any exceptions when attempting to kill a hung process.
+        }
+
+        throw new Exception("Timed out waiting for 'gh auth status'.");
+    }
+
     if (authCheck.ExitCode != 0)
     {
         throw new Exception("gh CLI is not authenticated. Run 'gh auth login' first.");
@@ -60,11 +76,46 @@ try
             FileName = "gh",
             Arguments = $"repo list {owner} --json name,owner,isFork,isArchived,sshUrl --limit {repoLimit}",
             RedirectStandardOutput = true,
+            RedirectStandardError = true,
             CreateNoWindow = true
         }) ?? throw new Exception("Cannot start gh process");
 
-        var json = await listProcess.StandardOutput.ReadToEndAsync();
+        const int repoListTimeoutMs = 60_000;
+        var stdoutTask = listProcess.StandardOutput.ReadToEndAsync();
+        var stderrTask = listProcess.StandardError.ReadToEndAsync();
+        var completionTask = Task.WhenAll(stdoutTask, stderrTask);
+        var timeoutTask = Task.Delay(repoListTimeoutMs);
+
+        if (await Task.WhenAny(completionTask, timeoutTask) == timeoutTask)
+        {
+            try
+            {
+                if (!listProcess.HasExited)
+                {
+                    listProcess.Kill();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to kill timed-out gh process for owner {Owner}", owner);
+            }
+
+            fails.Add($"Owner '{owner}': gh repo list timed out after {repoListTimeoutMs} ms.");
+            Log.Error("gh repo list for owner {Owner} timed out after {TimeoutMs} ms.", owner, repoListTimeoutMs);
+            continue;
+        }
+
+        var json = await stdoutTask;
+        var repoListStderr = await stderrTask;
         listProcess.WaitForExit();
+
+        if (listProcess.ExitCode != 0)
+        {
+            fails.Add($"Owner '{owner}': gh repo list failed with exit code {listProcess.ExitCode}.");
+            Log.Error("gh repo list for owner {Owner} failed with exit code {ExitCode}. stderr: {Stderr}",
+                owner, listProcess.ExitCode, repoListStderr);
+            continue;
+        }
 
         var ownerRepos = JsonSerializer.Deserialize<List<GitHubRepo>>(json, jsonOptions) ?? [];
         repos.AddRange(ownerRepos.Where(r => !r.IsArchived));
@@ -116,11 +167,13 @@ finally
 
 async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
 {
-    var useForce = forceSyncRepos.Contains(repo.Name, StringComparer.OrdinalIgnoreCase);
+    var repoRef = $"{repo.Owner.Login}/{repo.Name}";
+    var useForce =
+        forceSyncRepos.Contains(repoRef, StringComparer.OrdinalIgnoreCase) ||
+        forceSyncRepos.Contains(repo.Name, StringComparer.OrdinalIgnoreCase);
     var forceFlag = useForce
         ? " --force"
         : string.Empty;
-    var repoRef = $"{repo.Owner.Login}/{repo.Name}";
 
     const int maxAttempts = 3;
     for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -137,8 +190,30 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
                 CreateNoWindow = true
             }) ?? throw new Exception("Cannot start gh process");
 
-            var stderr = await process.StandardError.ReadToEndAsync();
-            process.WaitForExit(1000 * 30);
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(); } catch { /* Ignore */ }
+                var _ = await stderrTask;
+                Log.Warning("Syncing fork '{RepoName}' timed out on attempt {Attempt}/{Max}",
+                    repo.Name, attempt, maxAttempts);
+                if (attempt < maxAttempts)
+                {
+                    var delay = (int)Math.Pow(2, attempt) * 1000;
+                    await Task.Delay(delay);
+                    continue;
+                }
+
+                fails.Add($"{repo.Name}: timed out syncing fork after {maxAttempts} attempts");
+                return;
+            }
+
+            var stderr = await stderrTask;
 
             if (process.ExitCode == 0)
             {
