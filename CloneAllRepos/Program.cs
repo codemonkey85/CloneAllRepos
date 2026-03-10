@@ -75,15 +75,22 @@ try
     List<GitHubRepo> repos = [];
     foreach (var owner in ownersToInclude)
     {
-        using var listProcess = Process.Start(new ProcessStartInfo
+        var listProcessStartInfo = new ProcessStartInfo
         {
             FileName = "gh",
-            Arguments = $"repo list {owner} --json name,owner,isFork,isArchived,sshUrl --limit {repoLimit}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
             UseShellExecute = false
-        }) ?? throw new Exception("Cannot start gh process");
+        };
+        listProcessStartInfo.ArgumentList.Add("repo");
+        listProcessStartInfo.ArgumentList.Add("list");
+        listProcessStartInfo.ArgumentList.Add(owner);
+        listProcessStartInfo.ArgumentList.Add("--json");
+        listProcessStartInfo.ArgumentList.Add("name,owner,isFork,isArchived,sshUrl");
+        listProcessStartInfo.ArgumentList.Add("--limit");
+        listProcessStartInfo.ArgumentList.Add(repoLimit.ToString());
+        using var listProcess = Process.Start(listProcessStartInfo) ?? throw new Exception("Cannot start gh process");
 
         const int repoListTimeoutMs = 60_000;
         var stdoutTask = listProcess.StandardOutput.ReadToEndAsync();
@@ -184,15 +191,27 @@ try
     var allDirs = newLayoutDirs.Concat(legacyDirsList);
     var repoDirs = repos.Select(repo => Path.Combine(repo.Owner.Login, repo.Name));
 
-    var repoNames = repos.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-    var handledLegacyDirs = legacyDirsList.Where(name => repoNames.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase).ToList();
+    // Only count a legacy dir as "handled" if its origin URL matches a known repo, so same-named repos from
+    // different owners don't incorrectly suppress each other from the remainingDirs pull pass.
+    var sshUrlsByName = repos.ToLookup(r => r.Name, r => r.SshUrl, StringComparer.OrdinalIgnoreCase);
+    var handledLegacyDirsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var legacyName in legacyDirsList.Where(n => sshUrlsByName.Contains(n)))
+    {
+        var legacyPath = Path.Combine(targetDirectory, legacyName);
+        var originUrl = await GetOriginUrl(legacyPath);
+        if (originUrl is not null && sshUrlsByName[legacyName].Contains(originUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            handledLegacyDirsSet.Add(legacyName);
+        }
+    }
+    var handledLegacyDirs = handledLegacyDirsSet.ToList();
     var remainingDirs = allDirs.Where(dir =>
         !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase) &&
         !handledLegacyDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
 
     foreach (var repo in repos)
     {
-        CloneOrUpdateRepo(targetDirectory, repo);
+        await CloneOrUpdateRepo(targetDirectory, repo);
     }
 
     foreach (var repoRelPath in remainingDirs)
@@ -230,9 +249,6 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
     var useForce =
         forceSyncRepos.Contains(repoRef, StringComparer.OrdinalIgnoreCase) ||
         forceSyncRepos.Contains(repo.Name, StringComparer.OrdinalIgnoreCase);
-    var forceFlag = useForce
-        ? " --force"
-        : string.Empty;
 
     const int maxAttempts = 3;
     for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -241,14 +257,18 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
         {
             Log.Information("Syncing fork {RepoRef} (attempt {Attempt}/{Max})", repoRef, attempt, maxAttempts);
 
-            using var process = Process.Start(new ProcessStartInfo
+            var syncProcessStartInfo = new ProcessStartInfo
             {
                 FileName = "gh",
-                Arguments = $"repo sync{forceFlag} {repoRef}",
                 RedirectStandardError = true,
                 CreateNoWindow = true,
                 UseShellExecute = false
-            }) ?? throw new Exception("Cannot start gh process");
+            };
+            syncProcessStartInfo.ArgumentList.Add("repo");
+            syncProcessStartInfo.ArgumentList.Add("sync");
+            if (useForce) syncProcessStartInfo.ArgumentList.Add("--force");
+            syncProcessStartInfo.ArgumentList.Add(repoRef);
+            using var process = Process.Start(syncProcessStartInfo) ?? throw new Exception("Cannot start gh process");
 
             var stderrTask = process.StandardError.ReadToEndAsync();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -342,7 +362,7 @@ bool IsDivergedError(string stderr) =>
     stderr.Contains("not possible to fast-forward", StringComparison.OrdinalIgnoreCase) ||
     stderr.Contains("not a fast-forward", StringComparison.OrdinalIgnoreCase);
 
-string? GetOriginUrl(string workingDirectory)
+async Task<string?> GetOriginUrl(string workingDirectory)
 {
     try
     {
@@ -355,9 +375,21 @@ string? GetOriginUrl(string workingDirectory)
             UseShellExecute = false,
             CreateNoWindow = true
         });
-        var url = process?.StandardOutput.ReadToEnd().Trim();
-        process?.WaitForExit(5000);
-        return url;
+        if (process is null) return null;
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(); } catch { /* Ignore */ }
+            return null;
+        }
+
+        return (await stdoutTask).Trim();
     }
     catch
     {
@@ -365,13 +397,13 @@ string? GetOriginUrl(string workingDirectory)
     }
 }
 
-void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
+async Task CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
 {
     try
     {
         // If the repo already exists at the root level (legacy layout), verify the origin matches before using it.
         var rootLevelPath = Path.Combine(targetReposDirectory, repo.Name);
-        if (Directory.Exists(Path.Combine(rootLevelPath, ".git")) && GetOriginUrl(rootLevelPath) == repo.SshUrl)
+        if (Directory.Exists(Path.Combine(rootLevelPath, ".git")) && await GetOriginUrl(rootLevelPath) == repo.SshUrl)
         {
             Log.Information("Updating {RepoName} (root)", repo.Name);
             PullRepo(rootLevelPath, repo.Name);
@@ -384,8 +416,17 @@ void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
         if (!Directory.Exists(destinationPath))
         {
             Log.Information("Cloning {RepoName}", repo.Name);
-            var process =
-                Process.Start(new ProcessStartInfo { WorkingDirectory = ownerDir, FileName = "git", Arguments = $"clone {repo.SshUrl} --no-tags", CreateNoWindow = true }) ?? throw new Exception("Cannot create process");
+            var cloneProcessStartInfo = new ProcessStartInfo
+            {
+                WorkingDirectory = ownerDir,
+                FileName = "git",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+            cloneProcessStartInfo.ArgumentList.Add("clone");
+            cloneProcessStartInfo.ArgumentList.Add(repo.SshUrl);
+            cloneProcessStartInfo.ArgumentList.Add("--no-tags");
+            var process = Process.Start(cloneProcessStartInfo) ?? throw new Exception("Cannot create process");
 
             Log.Information(process.WaitForExit(1000 * 30)
                 ? "Repo {RepoName} finished cloning"
