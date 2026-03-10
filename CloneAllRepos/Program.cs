@@ -179,7 +179,11 @@ try
     var allDirs = newLayoutDirs.Concat(legacyDirs);
     var repoDirs = repos.Select(repo => Path.Combine(repo.Owner.Login, repo.Name));
 
-    var remainingDirs = allDirs.Where(dir => !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
+    var repoNames = repos.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var handledLegacyDirs = legacyDirs.Where(name => repoNames.Contains(name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var remainingDirs = allDirs.Where(dir =>
+        !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase) &&
+        !handledLegacyDirs.Contains(dir, StringComparer.OrdinalIgnoreCase));
 
     foreach (var repo in repos)
     {
@@ -337,6 +341,15 @@ void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
 {
     try
     {
+        // If the repo already exists at the root level (legacy layout), keep it there.
+        var rootLevelPath = Path.Combine(targetReposDirectory, repo.Name);
+        if (Directory.Exists(Path.Combine(rootLevelPath, ".git")))
+        {
+            Log.Information("Updating {RepoName} (root)", repo.Name);
+            PullRepo(rootLevelPath, repo.Name);
+            return;
+        }
+
         var ownerDir = Path.Combine(targetReposDirectory, repo.Owner.Login);
         Directory.CreateDirectory(ownerDir);
         var destinationPath = Path.Combine(ownerDir, repo.Name);
