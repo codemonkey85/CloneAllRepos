@@ -294,7 +294,7 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
             {
                 Log.Warning(
                     "Fork '{RepoRef}' has diverged from upstream and cannot be synced automatically. " +
-                    "To force-sync (discarding local changes): gh repo sync --force {RepoRef}",
+                    "To force-sync (discarding local changes): gh repo sync --force {ForkRef}",
                     repoRef, repoRef);
                 fails.Add($"{repoRef}: fork has diverged (gh repo sync --force {repoRef})");
                 return;
