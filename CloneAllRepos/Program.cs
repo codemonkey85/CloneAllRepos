@@ -35,10 +35,7 @@ try
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    using var authCheck = Process.Start(new ProcessStartInfo
-    {
-        FileName = "gh", Arguments = "auth status", RedirectStandardError = false, CreateNoWindow = true
-    }) ?? throw new Exception("Cannot start gh process");
+    using var authCheck = Process.Start(new ProcessStartInfo { FileName = "gh", Arguments = "auth status", RedirectStandardError = false, CreateNoWindow = true }) ?? throw new Exception("Cannot start gh process");
 
     const int authCheckTimeoutMilliseconds = 30000;
     var exited = authCheck.WaitForExit(authCheckTimeoutMilliseconds);
@@ -107,7 +104,11 @@ try
             }
 
             // Observe the pending read tasks to prevent unobserved task exceptions after kill.
-            try { await completionTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { /* Ignore */ }
+            try { await completionTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+            catch
+            {
+                /* Ignore */
+            }
 
             fails.Add($"Owner '{owner}': gh repo list timed out after {repoListTimeoutMs} ms.");
             Log.Error("gh repo list for owner {Owner} timed out after {TimeoutMs} ms.", owner, repoListTimeoutMs);
@@ -119,7 +120,18 @@ try
 
         if (!listProcess.WaitForExit(5000))
         {
-            try { if (!listProcess.HasExited) listProcess.Kill(); } catch { /* Ignore */ }
+            try
+            {
+                if (!listProcess.HasExited)
+                {
+                    listProcess.Kill();
+                }
+            }
+            catch
+            {
+                /* Ignore */
+            }
+
             fails.Add($"Owner '{owner}': gh repo list process did not exit cleanly.");
             Log.Error("gh repo list for owner {Owner} did not exit cleanly after streams closed.", owner);
             continue;
@@ -237,9 +249,19 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
             }
             catch (OperationCanceledException)
             {
-                try { process.Kill(); } catch { /* Ignore */ }
+                try { process.Kill(); }
+                catch
+                {
+                    /* Ignore */
+                }
+
                 // Await stderrTask with a bounded timeout so a hung process can't block indefinitely.
-                try { await stderrTask.WaitAsync(TimeSpan.FromSeconds(5)); } catch { /* Ignore */ }
+                try { await stderrTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+                catch
+                {
+                    /* Ignore */
+                }
+
                 Log.Warning("Syncing fork '{RepoRef}' timed out on attempt {Attempt}/{Max}",
                     repoRef, attempt, maxAttempts);
                 if (attempt < maxAttempts)
@@ -322,13 +344,7 @@ void CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
         {
             Log.Information("Cloning {RepoName}", repo.Name);
             var process =
-                Process.Start(new ProcessStartInfo
-                {
-                    WorkingDirectory = ownerDir,
-                    FileName = "git",
-                    Arguments = $"clone {repo.SshUrl} --no-tags",
-                    CreateNoWindow = true
-                }) ?? throw new Exception("Cannot create process");
+                Process.Start(new ProcessStartInfo { WorkingDirectory = ownerDir, FileName = "git", Arguments = $"clone {repo.SshUrl} --no-tags", CreateNoWindow = true }) ?? throw new Exception("Cannot create process");
 
             Log.Information(process.WaitForExit(1000 * 30)
                 ? "Repo {RepoName} finished cloning"
@@ -380,10 +396,7 @@ void LogExceptions(Exception ex, string? repoName = null)
 
 void PullRepo(string workingDirectory, string repoName)
 {
-    var processStartInfo = new ProcessStartInfo
-    {
-        WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false
-    };
+    var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false };
 
     Log.Information("Starting pull for {RepoName}", repoName);
     Process.Start(processStartInfo)?.WaitForExit(1000 * 30);
