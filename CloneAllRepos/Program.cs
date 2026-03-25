@@ -167,6 +167,8 @@ try
         repos.AddRange(ownerRepos.Where(r => !r.IsArchived));
     }
 
+    repos.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name));
+
     foreach (var repo in repos.Where(r => r.IsFork))
     {
         await SyncForkAsync(repo, appConfig.ForceSyncRepos);
