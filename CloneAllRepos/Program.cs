@@ -35,7 +35,14 @@ try
         throw new Exception($"{nameof(githubUserName)} is not set");
     }
 
-    using var authCheck = Process.Start(new ProcessStartInfo { FileName = "gh", Arguments = "auth status", RedirectStandardError = false, UseShellExecute = false, CreateNoWindow = true }) ?? throw new Exception("Cannot start gh process");
+    using var authCheck = Process.Start(new ProcessStartInfo
+    {
+        FileName = "gh",
+        Arguments = "auth status",
+        RedirectStandardError = false,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    }) ?? throw new Exception("Cannot start gh process");
 
     const int authCheckTimeoutMilliseconds = 30000;
     var exited = authCheck.WaitForExit(authCheckTimeoutMilliseconds);
@@ -197,7 +204,7 @@ try
     // different owners don't incorrectly suppress each other from the remainingDirs pull pass.
     var sshUrlsByName = repos.ToLookup(r => r.Name, r => r.SshUrl, StringComparer.OrdinalIgnoreCase);
     var handledLegacyDirsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var legacyName in legacyDirsList.Where(n => sshUrlsByName.Contains(n)))
+    foreach (var legacyName in legacyDirsList.Where(sshUrlsByName.Contains))
     {
         var legacyPath = Path.Combine(targetDirectory, legacyName);
         var originUrl = await GetOriginUrl(legacyPath);
@@ -206,6 +213,7 @@ try
             handledLegacyDirsSet.Add(legacyName);
         }
     }
+
     var handledLegacyDirs = handledLegacyDirsSet.ToList();
     var remainingDirs = allDirs.Where(dir =>
         !repoDirs.Contains(dir, StringComparer.OrdinalIgnoreCase) &&
@@ -259,16 +267,14 @@ async Task SyncForkAsync(GitHubRepo repo, List<string> forceSyncRepos)
         {
             Log.Information("Syncing fork {RepoRef} (attempt {Attempt}/{Max})", repoRef, attempt, maxAttempts);
 
-            var syncProcessStartInfo = new ProcessStartInfo
-            {
-                FileName = "gh",
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                UseShellExecute = false
-            };
+            var syncProcessStartInfo = new ProcessStartInfo { FileName = "gh", RedirectStandardError = true, CreateNoWindow = true, UseShellExecute = false };
             syncProcessStartInfo.ArgumentList.Add("repo");
             syncProcessStartInfo.ArgumentList.Add("sync");
-            if (useForce) syncProcessStartInfo.ArgumentList.Add("--force");
+            if (useForce)
+            {
+                syncProcessStartInfo.ArgumentList.Add("--force");
+            }
+
             syncProcessStartInfo.ArgumentList.Add(repoRef);
             using var process = Process.Start(syncProcessStartInfo) ?? throw new Exception("Cannot start gh process");
 
@@ -377,7 +383,10 @@ async Task<string?> GetOriginUrl(string workingDirectory)
             UseShellExecute = false,
             CreateNoWindow = true
         });
-        if (process is null) return null;
+        if (process is null)
+        {
+            return null;
+        }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -387,7 +396,12 @@ async Task<string?> GetOriginUrl(string workingDirectory)
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(); } catch { /* Ignore */ }
+            try { process.Kill(); }
+            catch
+            {
+                /* Ignore */
+            }
+
             return null;
         }
 
@@ -418,13 +432,7 @@ async Task CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
         if (!Directory.Exists(destinationPath))
         {
             Log.Information("Cloning {RepoName}", repo.Name);
-            var cloneProcessStartInfo = new ProcessStartInfo
-            {
-                WorkingDirectory = ownerDir,
-                FileName = "git",
-                CreateNoWindow = true,
-                UseShellExecute = false
-            };
+            var cloneProcessStartInfo = new ProcessStartInfo { WorkingDirectory = ownerDir, FileName = "git", CreateNoWindow = true, UseShellExecute = false };
             cloneProcessStartInfo.ArgumentList.Add("clone");
             cloneProcessStartInfo.ArgumentList.Add(repo.SshUrl);
             cloneProcessStartInfo.ArgumentList.Add("--no-tags");
@@ -433,7 +441,12 @@ async Task CloneOrUpdateRepo(string targetReposDirectory, GitHubRepo repo)
             var cloned = process.WaitForExit(1000 * 30);
             if (!cloned)
             {
-                try { process.Kill(); } catch { /* best effort */ }
+                try { process.Kill(); }
+                catch
+                {
+                    /* best effort */
+                }
+
                 var repoRef = $"{repo.Owner.Login}/{repo.Name}";
                 Log.Error("Repo {RepoRef} did not finish cloning within the timeout; process killed", repoRef);
                 fails.Add($"{repoRef}: clone timed out ({destinationPath})");
