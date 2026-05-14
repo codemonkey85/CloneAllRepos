@@ -501,7 +501,7 @@ void LogExceptions(Exception ex, string? repoName = null)
 
 void PullRepo(string workingDirectory, string repoName)
 {
-    var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull", CreateNoWindow = false };
+    var processStartInfo = new ProcessStartInfo { WorkingDirectory = workingDirectory, FileName = "git", Arguments = "pull --no-edit", CreateNoWindow = false };
 
     Log.Information("Starting pull for {RepoName}", repoName);
     Process.Start(processStartInfo)?.WaitForExit(1000 * 30);
